@@ -98,6 +98,42 @@ Two modes, and the UI says which you are getting:
 
 Most tools silently do the second and let you discover the codec change later.
 
+## Building along with a tutorial
+
+Downstream also exposes what a coding agent needs to work through a tutorial
+video: the chapter outline, the resources named in the description, and the
+transcript sliced per chapter.
+
+```bash
+# outline, links and chapter list
+curl -s -X POST http://127.0.0.1:5174/api/lesson \
+  -H 'Content-Type: application/json' -d '{"url":"<video>"}'
+
+# transcript for one chapter, as [mm:ss] narration lines
+curl -s -X POST http://127.0.0.1:5174/api/lesson/transcript \
+  -H 'Content-Type: application/json' -d '{"url":"<video>","chapter":5}'
+```
+
+A [Claude Code skill](.claude/skills/video-to-code/SKILL.md) sits on top of
+this. Copy it to `~/.claude/skills/` and run `/video-to-code <url>` to have an
+agent build the project chapter by chapter, stopping after each one so you can
+run and test what was built.
+
+Why chapter-scoped: a 13-hour course is roughly 165k tokens of prose, but any
+one chapter is 3–20k. Working a section at a time keeps each step reviewable
+and lets you stop, test and resume.
+
+The design decision worth knowing is that the skill works from the **narration,
+not the pixels**. Reading code off video frames is unreliable — OCR mangles
+`l`/`1`, quotes and indentation, and vision models fill gaps with
+plausible-looking code that does not compile. The transcript reliably gives the
+architecture, commands, file names and ordering; the agent writes the code
+itself against current APIs and flags where it deviated from a tutorial whose
+stack has since moved on.
+
+Captions are required. Without them there is nothing to read, and the routes
+say so rather than guessing.
+
 ## Keyboard
 
 | | |

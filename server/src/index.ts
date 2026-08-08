@@ -20,6 +20,7 @@ import {
   retry,
 } from './queue.ts';
 import { revealInFinder } from './runner.ts';
+import { fetchTranscript, renderSegments, sliceTranscript } from './transcript.ts';
 
 const app = Fastify({ logger: false, bodyLimit: 2 * 1024 * 1024 });
 
@@ -131,17 +132,137 @@ app.patch<{ Body: Partial<Settings> }>('/api/settings', async (req) => saveSetti
  * storyboard hosts are not consistent about it. Proxying keeps the UI from
  * showing broken tiles on some videos and not others.
  */
+/**
+ * Allowlisted thumbnail hosts. This is an allowlist rather than an open proxy
+ * so the route cannot be turned into an SSRF primitive against the loopback
+ * interface or a cloud metadata endpoint.
+ */
+const THUMB_HOSTS =
+  /^(?:[\w-]+\.)*(?:ggpht\.com|googleusercontent\.com|ytimg\.com|tiktokcdn\.com|tiktokcdn-us\.com|ibyteimg\.com|cdninstagram\.com|fbcdn\.net|twimg\.com|redd\.it|redditmedia\.com|vimeocdn\.com|jtvnw\.net|sndcdn\.com|dmcdn\.net)$/i;
+
 app.get<{ Querystring: { url?: string } }>('/api/thumb', async (req, reply) => {
   const target = req.query.url;
-  if (!target || !/^https:\/\/[\w.-]+\.(ggpht|googleusercontent|ytimg)\.com\//.test(target)) {
+  let host: string | null = null;
+  try {
+    const parsed = new URL(target ?? '');
+    if (parsed.protocol === 'https:') host = parsed.hostname;
+  } catch {
+    host = null;
+  }
+  if (!host || !THUMB_HOSTS.test(host)) {
     return reply.status(400).send({ error: 'Unsupported thumbnail host.' });
   }
-  const upstream = await fetch(target);
-  if (!upstream.ok || !upstream.body) return reply.status(502).send({ error: 'Upstream failed.' });
-  reply.header('Cache-Control', 'public, max-age=86400');
-  reply.type(upstream.headers.get('content-type') ?? 'image/jpeg');
-  return reply.send(Buffer.from(await upstream.arrayBuffer()));
+  try {
+    const upstream = await fetch(target as string, { signal: AbortSignal.timeout(10_000) });
+    if (!upstream.ok) return reply.status(502).send({ error: 'Upstream failed.' });
+    const type = upstream.headers.get('content-type') ?? 'image/jpeg';
+    // Refuse to relay anything that is not an image, so the proxy cannot be
+    // used to launder arbitrary content through this origin.
+    if (!type.startsWith('image/')) {
+      return reply.status(415).send({ error: 'Upstream did not return an image.' });
+    }
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.type(type);
+    return reply.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch {
+    // DNS failure, timeout, connection reset — a dead thumbnail is not a
+    // server error, and the UI already falls back to a placeholder.
+    return reply.status(502).send({ error: 'Thumbnail unreachable.' });
+  }
 });
+
+/* --------------------------------------------------------------- lessons */
+
+/**
+ * Everything an agent needs to work through a tutorial: the chapter outline,
+ * the resources named in the description, and the transcript — sliced to one
+ * chapter at a time, because a 13-hour course is ~165k tokens of prose and
+ * nobody should read it all to implement step three.
+ */
+app.post<{ Body: { url?: string } }>('/api/lesson', async (req, reply) => {
+  const url = req.body?.url?.trim();
+  if (!url) return reply.status(400).send({ error: 'A URL is required.' });
+
+  try {
+    const media = await probe(url);
+    const description = media.description ?? '';
+    const links = [...new Set(description.match(/https?:\/\/[^\s)<>"']+/g) ?? [])];
+    const repos = links.filter((l) => /github\.com\/[\w.-]+\/[\w.-]+/.test(l));
+
+    // Chapters give real boundaries. Without them, fall back to 10-minute
+    // blocks so the chapter-at-a-time workflow still applies.
+    const duration = media.duration ?? 0;
+    const chapters =
+      media.chapters.length > 0
+        ? media.chapters
+        : Array.from({ length: Math.max(1, Math.ceil(duration / 600)) }, (_, i) => ({
+            title: `Part ${i + 1}`,
+            start: i * 600,
+            end: Math.min((i + 1) * 600, duration),
+          }));
+
+    const transcript = await fetchTranscript(media.webpageUrl, media.id);
+
+    return {
+      id: media.id,
+      url: media.webpageUrl,
+      title: media.title,
+      channel: media.channel,
+      duration: media.duration,
+      description,
+      repos,
+      links: links.filter((l) => !repos.includes(l)).slice(0, 25),
+      hasTranscript: transcript !== null,
+      transcriptSegments: transcript?.segments.length ?? 0,
+      synthesizedChapters: media.chapters.length === 0,
+      chapters: chapters.map((c, i) => ({
+        index: i,
+        title: c.title,
+        start: c.start,
+        end: c.end,
+        minutes: Math.round((c.end - c.start) / 60),
+      })),
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return reply.status(422).send({ error: message });
+  }
+});
+
+app.post<{ Body: { url?: string; start?: number; end?: number; chapter?: number } }>(
+  '/api/lesson/transcript',
+  async (req, reply) => {
+    const url = req.body?.url?.trim();
+    if (!url) return reply.status(400).send({ error: 'A URL is required.' });
+
+    const media = await probe(url);
+    const transcript = await fetchTranscript(media.webpageUrl, media.id);
+    if (!transcript) {
+      return reply
+        .status(404)
+        .send({ error: 'This video has no captions, so there is nothing to read.' });
+    }
+
+    let start = req.body?.start ?? 0;
+    let end = req.body?.end ?? (media.duration ?? Number.MAX_SAFE_INTEGER);
+
+    if (typeof req.body?.chapter === 'number' && media.chapters.length > 0) {
+      const chapter = media.chapters[req.body.chapter];
+      if (!chapter) return reply.status(404).send({ error: 'No such chapter.' });
+      start = chapter.start;
+      end = chapter.end;
+    }
+
+    const segments = sliceTranscript(transcript, start, end);
+    return {
+      start,
+      end,
+      auto: transcript.auto,
+      count: segments.length,
+      text: renderSegments(segments),
+    };
+  },
+);
 
 /* ---------------------------------------------------------------- events */
 
