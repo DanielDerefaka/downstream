@@ -12,17 +12,23 @@ The user stays in the loop by design. You are not trying to produce the whole
 app in one shot — you are the pair of hands doing what the tutorial says, and
 the user is the one who confirms it actually works before you continue.
 
-## What this is not
+## Narration first, frames to confirm
 
-Do **not** try to transcribe code off the screen. You are working from the
-narration, not the pixels. The transcript tells you the architecture, the
-commands, the file names, the package choices and the order of work. Write the
-code yourself from that, using APIs you know to be current.
+The transcript is the primary source: it carries the architecture, commands,
+file names, package choices and ordering, it is cheap, and it is complete.
+Start there and write the code yourself.
+
+Frames are the second source, and they are more useful than they look. A short
+file fits on screen and reads verbatim at 1080p. Use them to resolve what
+narration cannot express — exact JSX, class strings, prop names, a file tree —
+but see "Reading frames" below, because *which* frame you pick decides whether
+you get truth or fiction.
 
 When the video's stack has moved on since recording (a major version bump, a
 renamed API, a deprecated package), **use the current approach and tell the user
 you deviated and why.** Faithfully reproducing a broken 2-year-old API helps
-nobody.
+nobody. Note that a version the tutorial deliberately pins is not drift — honour
+the pin, since the rest of the course depends on it.
 
 ## Step 1 — Preflight
 
@@ -121,6 +127,46 @@ Keep a running note of anything the tutorial states but never shows — "I set u
 my keys earlier", "I already installed this", jump cuts. These are the usual
 cause of a project that looks right and does not run. Surface them explicitly
 rather than inventing values.
+
+## Reading frames
+
+When narration leaves the exact code ambiguous, pull the picture. Download a
+short window at 1080p — code is illegible below about 720p — and sample it:
+
+```bash
+yt-dlp --no-warnings --no-playlist -f "bv*[height<=1080]+ba/b[height<=1080]" \
+  --download-sections "*<START>-<END>" -o "frames/clip.%(ext)s" "<VIDEO_URL>"
+ffmpeg -v error -i frames/clip.webm -vf "fps=1/4" -q:v 2 frames/f_%02d.png -y
+```
+
+A 20-second 1080p window is about 1.2 MB, so this is cheap in bandwidth. It is
+*not* cheap in vision tokens — roughly 1.5k per frame — so sample deliberately
+rather than blanketing the chapter.
+
+**Pick the right moment.** Two things ruin a frame, and both are detectable:
+
+- **Occlusion.** Autocomplete dropdowns, hover tooltips, inline error lenses and
+  "Fix in Chat" buttons routinely cover half the editor. In one sampled pair
+  eight seconds apart, the first frame had a completion list hiding lines 9–12
+  and the second was perfectly clean. If a popup covers code, discard the frame
+  and take a neighbouring one.
+- **Mid-typing and AI ghost text.** Editors like Cursor render greyed
+  suggestions inline that are *not* what the author accepted. Code caught
+  mid-keystroke will not compile and was never meant to.
+
+**Sample at the end of a section, not the middle.** During a build the file is
+broken by design — the browser panel will be showing `X is not defined` because
+the component does not exist yet. The frame you want is the one after it works.
+The error panel is a useful signal: a clear one usually means the code on screen
+is the settled version.
+
+**Read structure, not just code.** The file tree, the breadcrumb, the tab bar
+and the framework version in the dev-server panel are all reliably legible and
+tell you the project layout for free — often more valuable than any single file.
+
+Never paste frame-read code in blind. Treat it as a strong hint, reconcile it
+with the narration, and say when you took something from the screen so the user
+can check that timestamp.
 
 ## Step 5 — Hand back after every chapter
 
