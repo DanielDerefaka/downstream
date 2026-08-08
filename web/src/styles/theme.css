@@ -1,0 +1,337 @@
+@import 'tailwindcss';
+
+/*
+  Downstream design tokens.
+
+  The reference this was built against used a flat near-black card on a flat
+  near-black page, which reads as "dark mode" but has no depth — every surface
+  sits on the same plane. We keep the palette and the violet accent, then add
+  the two things that make a dark UI feel physical: a light source (a fixed
+  aurora bloom the surfaces catch) and a consistent elevation ladder where each
+  step up gets a brighter top edge, as if lit from above.
+*/
+
+@theme {
+  /* ---- surfaces, darkest to lightest ---- */
+  --color-ink-1000: #04040a;
+  --color-ink-950: #07070f;
+  --color-ink-900: #0b0b15;
+  --color-ink-850: #10101c;
+  --color-ink-800: #151522;
+  --color-ink-750: #1b1b2b;
+  --color-ink-700: #232336;
+  --color-ink-600: #2e2e45;
+  --color-ink-500: #3d3d58;
+
+  /* ---- text ---- */
+  --color-chalk: #f4f4f8;
+  --color-chalk-dim: #a6a6bd;
+  --color-chalk-faint: #6b6b86;
+  --color-chalk-ghost: #494960;
+
+  /* ---- accent: violet → periwinkle, the reference's signature ---- */
+  --color-iris-300: #d3c8ff;
+  --color-iris-400: #b8a6ff;
+  --color-iris-500: #9a85ff;
+  --color-iris-600: #7c6bff;
+  --color-iris-700: #6350e6;
+
+  /* ---- semantic ---- */
+  --color-mint: #4ade80;
+  --color-coral: #fb7185;
+  --color-amber: #fbbf24;
+  --color-sky: #6ee7f0;
+
+  /* ---- codec badges, kept distinct but desaturated so they never
+         compete with the accent for attention ---- */
+  --color-codec-av1: #7dd3fc;
+  --color-codec-vp9: #c4b5fd;
+  --color-codec-h264: #86efac;
+  --color-codec-h265: #fcd34d;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --radius-card: 20px;
+  --radius-panel: 14px;
+  --radius-control: 11px;
+
+  /* Springy, slightly overshooting — used for anything the user directly acts on. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    border-color: rgb(255 255 255 / 0.07);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink-1000);
+    color: var(--color-chalk);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-iris-500) 40%, transparent);
+    color: white;
+  }
+
+  /* Scrollbars: present enough to grab, quiet enough to ignore. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.09);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.18);
+    background-clip: content-box;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-iris-500);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /*
+    The elevation ladder. Each `.surface-*` is a background plus a hairline top
+    highlight — the cue that tells the eye which plane is nearer without
+    resorting to heavy drop shadows, which look muddy on near-black.
+  */
+  .surface-1 {
+    background: linear-gradient(180deg, var(--color-ink-900), var(--color-ink-950));
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  }
+
+  .surface-2 {
+    background: linear-gradient(180deg, var(--color-ink-850), var(--color-ink-900));
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.07),
+      0 1px 2px rgb(0 0 0 / 0.4);
+  }
+
+  .surface-3 {
+    background: linear-gradient(180deg, var(--color-ink-800), var(--color-ink-850));
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.09),
+      0 4px 16px -4px rgb(0 0 0 / 0.5);
+  }
+
+  /* The main window: glass over the aurora, with a bright rim to catch it. */
+  .glass-card {
+    background: color-mix(in oklab, var(--color-ink-900) 82%, transparent);
+    backdrop-filter: blur(28px) saturate(1.4);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.1),
+      inset 0 0 0 1px rgb(255 255 255 / 0.05),
+      0 30px 80px -20px rgb(0 0 0 / 0.85),
+      0 0 0 1px rgb(0 0 0 / 0.5);
+  }
+
+  /* Primary action: the reference's gradient, plus a specular top edge so it
+     reads as a lit physical key rather than a flat colour swatch. */
+  .btn-primary {
+    background: linear-gradient(
+      120deg,
+      var(--color-iris-600) 0%,
+      var(--color-iris-500) 45%,
+      var(--color-iris-400) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.35),
+      inset 0 -1px 0 0 rgb(0 0 0 / 0.2),
+      0 8px 24px -6px color-mix(in oklab, var(--color-iris-600) 60%, transparent);
+    transition:
+      transform 0.18s var(--ease-spring),
+      box-shadow 0.25s var(--ease-out-soft),
+      filter 0.2s ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.4),
+      0 12px 32px -6px color-mix(in oklab, var(--color-iris-600) 75%, transparent);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0.5px) scale(0.994);
+    filter: brightness(0.96);
+    transition-duration: 0.06s;
+  }
+  .btn-primary:disabled {
+    background: var(--color-ink-750);
+    color: var(--color-chalk-ghost);
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    background: rgb(255 255 255 / 0.045);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+    transition:
+      background 0.18s ease,
+      transform 0.18s var(--ease-spring);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgb(255 255 255 / 0.085);
+  }
+  .btn-ghost:active:not(:disabled) {
+    transform: scale(0.975);
+  }
+
+  .input-field {
+    background: rgb(0 0 0 / 0.35);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+    transition:
+      box-shadow 0.22s var(--ease-out-soft),
+      background 0.22s ease;
+  }
+  .input-field:focus-within {
+    background: rgb(0 0 0 / 0.45);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--color-iris-500) 65%, transparent),
+      0 0 0 4px color-mix(in oklab, var(--color-iris-600) 14%, transparent),
+      0 0 30px -6px color-mix(in oklab, var(--color-iris-600) 40%, transparent);
+  }
+
+  /*
+    The diagonal hatch from the reference's card interior. Kept very low
+    contrast — at 0.018 alpha it registers as texture, not as stripes.
+  */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(255 255 255 / 0.018) 0px,
+      rgb(255 255 255 / 0.018) 1px,
+      transparent 1px,
+      transparent 9px
+    );
+  }
+
+  .text-gradient {
+    background: linear-gradient(96deg, #ffffff 10%, var(--color-iris-300) 55%, #ffffff 95%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Row that lights up on hover — used by the format ladder and queue list. */
+  .row-interactive {
+    transition:
+      background 0.18s ease,
+      box-shadow 0.22s var(--ease-out-soft),
+      transform 0.22s var(--ease-spring);
+  }
+  .row-interactive:hover {
+    background: rgb(255 255 255 / 0.04);
+  }
+
+  .row-selected {
+    background: color-mix(in oklab, var(--color-iris-600) 14%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--color-iris-500) 45%, transparent),
+      0 0 24px -8px color-mix(in oklab, var(--color-iris-600) 70%, transparent);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .drag-none {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  /* Fades a scroll container's edges instead of hard-clipping its content. */
+  .mask-fade-y {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 14px,
+      black calc(100% - 14px),
+      transparent 100%
+    );
+  }
+}
+
+/* ------------------------------------------------------------ animations */
+
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(4%, -3%, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-3%, 3%, 0) scale(0.96);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-iris-500) 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.animate-aurora {
+  animation: aurora-drift 26s ease-in-out infinite;
+}
+.animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.12), transparent);
+  animation: shimmer 1.7s ease-in-out infinite;
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
