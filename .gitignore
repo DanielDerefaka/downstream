@@ -34,3 +34,8 @@ pnpm-debug.log*
 # os
 .DS_Store
 Thumbs.db
+
+# stray screenshots dropped into the repo root
+/image.png
+/*.png
+!web/public/*.png
